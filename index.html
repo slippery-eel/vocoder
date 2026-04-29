@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vocoder</title>
+<style>
+  :root {
+    --bg: #f1f5f9;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --accent: #6366f1;
+    --accent-hover: #4f46e5;
+    --text: #1e293b;
+    --muted: #64748b;
+    --danger: #ef4444;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 32px 16px;
+  }
+
+  .app { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+  header h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -.5px; }
+  header p  { color: var(--muted); margin-top: 4px; font-size: .95rem; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 24px;
+  }
+  .card h2 {
+    font-size: .78rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--muted); margin-bottom: 16px;
+  }
+  .card-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px;
+  }
+  .card-header h2 { margin-bottom: 0; }
+  .btn-reset {
+    background: none; border: 1px solid var(--border); border-radius: 6px;
+    color: var(--muted); font-size: .72rem; padding: 3px 9px; cursor: pointer;
+    transition: all .15s; line-height: 1.4;
+  }
+  .btn-reset:hover { background: var(--border); color: var(--text); }
+
+  /* ── Signals row ─────────────────────────────── */
+  .inputs-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 560px) { .inputs-row { grid-template-columns: 1fr; } }
+
+  .input-group { display: flex; flex-direction: column; gap: 10px; }
+  .input-group > label { font-size: .9rem; font-weight: 500; }
+
+  .file-zone {
+    border: 2px dashed var(--border); border-radius: 8px; padding: 16px;
+    text-align: center; cursor: pointer; position: relative;
+    transition: border-color .15s, background .15s;
+  }
+  .file-zone:hover { border-color: var(--accent); background: #f5f3ff; }
+  .file-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .zone-text { font-size: .82rem; color: var(--muted); pointer-events: none; }
+  .zone-name { font-size: .82rem; color: var(--accent); font-weight: 500; pointer-events: none; }
+
+  .btn-row { display: flex; gap: 8px; align-items: center; }
+
+  button {
+    border: none; border-radius: 8px; cursor: pointer;
+    font-size: .875rem; font-weight: 500; padding: 8px 16px;
+    transition: background .15s, opacity .15s;
+  }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+
+  .btn-primary {
+    background: var(--accent); color: #fff;
+    padding: 13px 32px; font-size: 1rem; border-radius: 10px; width: 100%;
+  }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+
+  .btn-sm { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+  .btn-sm:hover:not(:disabled) { background: var(--border); }
+  .btn-sm.active { background: #fee2e2; color: var(--danger); border-color: #fecaca; }
+
+  .btn-link { background: none; color: var(--muted); font-size: .8rem; padding: 3px 6px; }
+  .btn-link:hover { color: var(--danger); }
+
+  /* ── Waveform canvas ─────────────────────────── */
+  .viz-canvas {
+    width: 100%; height: 64px; display: block;
+    border-radius: 8px; border: 1px solid var(--border);
+    background: #f8fafc; cursor: default;
+  }
+
+  /* ── Spectrum canvas ─────────────────────────── */
+  .spec-canvas {
+    width: 100%; height: 60px; display: block;
+    border-radius: 8px; background: #0f172a;
+  }
+
+  /* ── Audio preview ───────────────────────────── */
+  .audio-preview { display: none; flex-direction: column; gap: 8px; }
+  .audio-preview.visible { display: flex; }
+  audio { width: 100%; border-radius: 8px; }
+
+  /* ── Carrier mode toggle ─────────────────────── */
+  .mode-tabs { display: flex; gap: 6px; }
+  .mode-tab {
+    flex: 1; padding: 7px; border-radius: 8px;
+    border: 1.5px solid var(--border); background: none;
+    font-size: .82rem; font-weight: 500; color: var(--muted);
+    cursor: pointer; transition: all .15s;
+  }
+  .mode-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* ── Chip radio groups ───────────────────────── */
+  .param-row { display: flex; flex-direction: column; gap: 4px; }
+  .param-row .param-label { font-size: .78rem; font-weight: 500; color: var(--muted); }
+  .chip-group { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip {
+    display: inline-flex; align-items: center;
+    padding: 4px 11px; border-radius: 20px;
+    border: 1.5px solid var(--border); cursor: pointer;
+    font-size: .78rem; font-weight: 500;
+    transition: all .15s; user-select: none;
+  }
+  .chip:has(input:checked) { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .chip input { display: none; }
+
+  /* ── Synth sub-panel ─────────────────────────── */
+  .synth-opts { display: flex; flex-direction: column; gap: 10px; }
+  .synth-opts.hidden { display: none; }
+
+  .divider {
+    display: flex; align-items: center; gap: 8px;
+    font-size: .78rem; color: var(--muted); margin: 2px 0;
+  }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* ── Sliders ─────────────────────────────────── */
+  .sliders-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  @media (max-width: 600px) { .sliders-row { grid-template-columns: repeat(2, 1fr); } }
+
+  .slider-group { display: flex; flex-direction: column; gap: 5px; }
+  .slider-group label {
+    font-size: .82rem; font-weight: 500;
+    display: flex; justify-content: space-between; align-items: center; gap: 4px;
+  }
+  .slider-group label > span:last-child { color: var(--accent); font-weight: 600; flex-shrink: 0; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+  .slider-group small { color: var(--muted); font-size: .73rem; }
+
+  /* ── Tooltips ────────────────────────────────────── */
+  .tip {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 13px; height: 13px; border-radius: 50%;
+    background: var(--border); color: var(--muted);
+    font-size: .6rem; font-weight: 700; line-height: 1;
+    cursor: help; position: relative; flex-shrink: 0; vertical-align: middle;
+  }
+  .tip::before, .tip::after {
+    position: absolute; bottom: calc(100% + 6px); left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none; opacity: 0; transition: opacity .15s; z-index: 200;
+  }
+  .tip::before {
+    content: ''; border: 5px solid transparent;
+    border-top-color: #1e293b; bottom: calc(100% + 1px);
+  }
+  .tip::after {
+    content: attr(data-tip);
+    background: #1e293b; color: #f1f5f9;
+    font-size: .73rem; font-weight: 400; line-height: 1.45;
+    padding: 8px 10px; border-radius: 7px;
+    width: 230px; white-space: normal;
+    text-transform: none; letter-spacing: 0; font-style: normal;
+  }
+  .tip:hover::before, .tip:hover::after { opacity: 1; }
+
+  /* ── Run / spinner ───────────────────────────── */
+  .spinner {
+    display: none; width: 16px; height: 16px;
+    border: 2px solid rgba(255,255,255,.4); border-top-color: #fff;
+    border-radius: 50%; animation: spin .6s linear infinite; margin: 0 auto;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Output ──────────────────────────────────── */
+  .output-section { display: none; }
+  .output-section.visible { display: block; }
+  .output-player { display: flex; flex-direction: column; gap: 10px; }
+
+  .download-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 16px;
+    font-size: .875rem; font-weight: 500; color: var(--text);
+    text-decoration: none; transition: background .15s; width: fit-content;
+  }
+  .download-btn:hover { background: var(--border); }
+
+  .error-msg {
+    display: none; background: #fef2f2; border: 1px solid #fecaca;
+    color: var(--danger); border-radius: 8px; padding: 12px 16px; font-size: .875rem;
+  }
+  .error-msg.visible { display: block; }
+
+  .viz-label {
+    font-size: .72rem; color: var(--muted); font-weight: 500;
+    text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <h1>Vocoder</h1>
+    <p>Apply your voice's spectral shape to a synthesized carrier.</p>
+  </header>
+
+  <!-- ── Signals ──────────────────────────────────── -->
+  <div class="card">
+    <h2>Signals</h2>
+    <div class="inputs-row">
+
+      <!-- Modulator -->
+      <div class="input-group">
+        <label>Modulator <span style="color:var(--muted);font-weight:400">(your voice)</span></label>
+        <div class="file-zone">
+          <input type="file" id="modFile" accept="audio/*">
+          <div id="modZoneText" class="zone-text">Click or drag an audio file</div>
+        </div>
+        <div class="btn-row">
+          <button class="btn-sm" id="recordBtn" onclick="toggleRecord()">&#9679; Record</button>
+          <button class="btn-link" id="modClear" onclick="clearModulator()" style="display:none">Clear</button>
+        </div>
+        <!-- Modulator preview (shown after upload/record) -->
+        <div class="audio-preview" id="modPreview">
+          <div class="viz-label">Waveform</div>
+          <canvas id="modCanvas" class="viz-canvas"></canvas>
+          <audio id="modAudio" controls></audio>
+        </div>
+      </div>
+
+      <!-- Carrier -->
+      <div class="input-group">
+        <label>Carrier</label>
+        <div class="file-zone">
+          <input type="file" id="carFile" accept="audio/*">
+          <div id="carZoneText" class="zone-text">Upload a file (optional)</div>
+        </div>
+        <button class="btn-link" id="carClear" onclick="clearCarrier()" style="display:none">Clear</button>
+
+        <div class="divider">or generate</div>
+
+        <div class="mode-tabs" id="modeTabs">
+          <button class="mode-tab active" id="tabSynth" onclick="setCarrierMode('synth')">Synth</button>
+          <button class="mode-tab"        id="tabNoise" onclick="setCarrierMode('noise')">Noise</button>
+        </div>
+
+        <div class="synth-opts" id="synthOpts">
+          <div class="param-row">
+            <div class="param-label">Waveform <span class="tip" data-tip="Shape of the carrier oscillator. Sawtooth: bright, full harmonics. Square: hollow, reedy. Triangle: soft, flute-like. Sine: pure tone, transparent — minimal harmonics.">?</span></div>
+            <div class="chip-group">
+              <label class="chip"><input type="radio" name="waveform" value="saw" checked>Saw</label>
+              <label class="chip"><input type="radio" name="waveform" value="square">Square</label>
+              <label class="chip"><input type="radio" name="waveform" value="tri">Triangle</label>
+              <label class="chip"><input type="radio" name="waveform" value="sine">Sine</label>
+            </div>
+          </div>
+          <div class="param-row">
+            <div class="param-label">Chord <span class="tip" data-tip="Intervals stacked on the root pitch. Major: bright (root + M3 + 5th). Minor: darker. Power: neutral (root + 5th). Single: one pitch only. Octaves: three stacked octaves, very full.">?</span></div>
+            <div class="chip-group">
+              <label class="chip"><input type="radio" name="chord" value="major" checked>Major</label>
+              <label class="chip"><input type="radio" name="chord" value="minor">Minor</label>
+              <label class="chip"><input type="radio" name="chord" value="power">Power</label>
+              <label class="chip"><input type="radio" name="chord" value="single">Single</label>
+              <label class="chip"><input type="radio" name="chord" value="octaves">Octaves</label>
+            </div>
+          </div>
+          <div class="slider-group">
+            <label><span>Pitch <span class="tip" data-tip="Root frequency of the carrier. Lower = deeper, heavier sound. C3 = 130 Hz, C4 = 261 Hz, C5 = 523 Hz. Tune to match the key of your source material.">?</span></span><span id="pitchVal">130 Hz — C3</span></label>
+            <input type="range" id="pitch" min="50" max="500" value="130" step="1"
+              oninput="document.getElementById('pitchVal').textContent=this.value+' Hz — '+freqToNote(+this.value)">
+          </div>
+          <div class="slider-group">
+            <label><span>Detune <span class="tip" data-tip="Pitch offset in cents applied to a second detuned copy of each carrier voice. Creates chorus-like unison thickness. 0 = pure. 10–30 ct = subtle warmth. 50 ct = wide spread.">?</span></span><span id="detuneVal">0 ct</span></label>
+            <input type="range" id="detune" min="0" max="50" value="0" step="1"
+              oninput="document.getElementById('detuneVal').textContent=this.value+' ct'">
+            <small>Unison thickness</small>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Processing ────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <h2>Processing</h2>
+      <button class="btn-reset" onclick="resetSection('processing')">↺ Reset</button>
+    </div>
+    <div class="sliders-row">
+      <div class="slider-group">
+        <label><span>Bands <span class="tip" data-tip="Number of frequency bands the modulator is split into. More bands = finer spectral detail, slower processing. 16–32 suits most sources; 32–64 captures fine textures in complex sounds like rain.">?</span></span><span id="bandsVal">24</span></label>
+        <input type="range" id="bands" min="4" max="64" value="24" step="1"
+          oninput="document.getElementById('bandsVal').textContent=this.value">
+        <small>More = finer detail</small>
+      </div>
+      <div class="slider-group">
+        <label><span>Attack <span class="tip" data-tip="How quickly each band's envelope rises when signal gets louder. 1–5 ms: transients preserved, snappy. 10–30 ms: natural feel. 50 ms+: smooth, blurry onset.">?</span></span><span id="attackVal">10 ms</span></label>
+        <input type="range" id="attack" min="1" max="200" value="10" step="1"
+          oninput="document.getElementById('attackVal').textContent=this.value+' ms'">
+        <small>Envelope rise speed</small>
+      </div>
+      <div class="slider-group">
+        <label><span>Release <span class="tip" data-tip="How long a band's volume lingers after signal drops. Short = dry, punchy. 200–500 ms = sustained notes. 500 ms+ creates a freeze effect — spectral content hangs and smears together.">?</span></span><span id="releaseVal">80 ms</span></label>
+        <input type="range" id="release" min="10" max="2000" value="80" step="10"
+          oninput="document.getElementById('releaseVal').textContent=this.value+' ms'">
+        <small>Envelope fall speed (500 ms+ = freeze)</small>
+      </div>
+      <div class="slider-group">
+        <label><span>Unvoiced <span class="tip" data-tip="Mixes white noise into the carrier before vocoding. Restores energy for fast broadband content: unvoiced consonants (s, f, t), rain texture, rustling leaves. 0 = pure carrier; 10–20% suits most sources.">?</span></span><span id="unvoicedVal">10%</span></label>
+        <input type="range" id="unvoiced" min="0" max="40" value="10" step="1"
+          oninput="document.getElementById('unvoicedVal').textContent=this.value+'%'">
+        <small>Noise for s / f / t</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Effects ──────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <h2>Effects</h2>
+      <button class="btn-reset" onclick="resetSection('effects')">↺ Reset</button>
+    </div>
+    <div class="sliders-row">
+      <div class="slider-group">
+        <label><span>Env Contrast <span class="tip" data-tip="Shapes how aggressively quiet vs. loud bands differ. Below 1.0: quiet bands get relatively louder — smooth, pad-like. Above 1.0: loud peaks dominate — punchier, more textured. Try 2.0 for rain, 0.5 for ambient wash.">?</span></span><span id="contrastVal">1.00</span></label>
+        <input type="range" id="envContrast" min="0.25" max="4" value="1" step="0.05"
+          oninput="document.getElementById('contrastVal').textContent=(+this.value).toFixed(2)">
+        <small>&lt;1 smooth / &gt;1 punchy</small>
+      </div>
+      <div class="slider-group">
+        <label><span>Wet / Dry <span class="tip" data-tip="Blends the vocoded signal with the original unprocessed modulator. 100% = fully vocoded. Lower values let the source's natural character bleed through beneath the carrier's pitch.">?</span></span><span id="wetVal">100%</span></label>
+        <input type="range" id="wetDry" min="0" max="100" value="100" step="1"
+          oninput="document.getElementById('wetVal').textContent=this.value+'%'">
+        <small>Vocoded vs original</small>
+      </div>
+      <div class="slider-group">
+        <label><span>Spectral Blur <span class="tip" data-tip="Averages each band's envelope with its nearest neighbors. 0 = sharp, independent bands. High values create a dreamy, diffuse sound — bird calls become ambient pads, voices become ghostly.">?</span></span><span id="blurVal">0</span></label>
+        <input type="range" id="spectralBlur" min="0" max="10" value="0" step="1"
+          oninput="document.getElementById('blurVal').textContent=this.value">
+        <small>Smear across bands</small>
+      </div>
+      <div class="slider-group">
+        <label><span>Ring Mod <span class="tip" data-tip="Multiplies the output by a sine wave, creating metallic sum/difference sidebands. 0 = off. 100–400 Hz = bell-like shimmer on rain. 500 Hz+ = increasingly alien on voices.">?</span></span><span id="ringVal">0 Hz</span></label>
+        <input type="range" id="ringMod" min="0" max="2000" value="0" step="10"
+          oninput="document.getElementById('ringVal').textContent=this.value+' Hz'">
+        <small>Metallic / alien (0 = off)</small>
+      </div>
+      <div class="slider-group">
+        <label><span>Tremolo Rate <span class="tip" data-tip="Speed of the amplitude LFO. 0.1–1 Hz: slow swell. 4–8 Hz: classic flutter. 10 Hz+: fast chopper effect. Activate by setting Tremolo Depth above 0.">?</span></span><span id="tremRateVal">4 Hz</span></label>
+        <input type="range" id="tremoloRate" min="0.1" max="20" value="4" step="0.1"
+          oninput="document.getElementById('tremRateVal').textContent=(+this.value).toFixed(1)+' Hz'">
+        <small>Amplitude LFO speed</small>
+      </div>
+      <div class="slider-group">
+        <label><span>Tremolo Depth <span class="tip" data-tip="How deep the amplitude LFO dips. 0% = off. 50% = gentle pulsing. 100% = amplitude drops to silence at each trough.">?</span></span><span id="tremDepthVal">0%</span></label>
+        <input type="range" id="tremoloDepth" min="0" max="100" value="0" step="1"
+          oninput="document.getElementById('tremDepthVal').textContent=this.value+'%'">
+        <small>Pulsing intensity (0 = off)</small>
+      </div>
+      <div class="slider-group">
+        <label><span>Vibrato Rate <span class="tip" data-tip="Speed of the carrier pitch LFO. Slow rates feel natural; fast rates sound robotic or warbling. Activate by setting Vibrato Depth above 0. Synth carrier only.">?</span></span><span id="vibRateVal">5.0 Hz</span></label>
+        <input type="range" id="vibratoRate" min="0.1" max="15" value="5" step="0.1"
+          oninput="document.getElementById('vibRateVal').textContent=(+this.value).toFixed(1)+' Hz'">
+        <small>Pitch LFO speed</small>
+      </div>
+      <div class="slider-group">
+        <label><span>Vibrato Depth <span class="tip" data-tip="Pitch deviation in cents (100 ct = 1 semitone). 5–10 ct = subtle warmth. 25–50 ct = noticeable wobble. Applies to synthesized carrier only — no effect on uploaded audio files.">?</span></span><span id="vibDepthVal">0 ct</span></label>
+        <input type="range" id="vibratoDepth" min="0" max="50" value="0" step="1"
+          oninput="document.getElementById('vibDepthVal').textContent=this.value+' ct'">
+        <small>Pitch wobble (0 = off, synth only)</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Reverb & Low-End ─────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <h2>Reverb &amp; Low-End</h2>
+      <button class="btn-reset" onclick="resetSection('reverb')">↺ Reset</button>
+    </div>
+    <div class="sliders-row">
+      <div class="slider-group">
+        <label><span>Reverb Mix <span class="tip" data-tip="How much Schroeder algorithmic reverb to blend in. 0 = dry. Even 10–30% dramatically opens up the space. High values wash the sound into a room or cave. Applied last in the signal chain.">?</span></span><span id="revMixVal">0%</span></label>
+        <input type="range" id="reverbMix" min="0" max="100" value="0" step="1"
+          oninput="document.getElementById('revMixVal').textContent=this.value+'%'">
+        <small>0 = off, 100 = full wet</small>
+      </div>
+      <div class="slider-group">
+        <label><span>Room Size <span class="tip" data-tip="Scales the reverb delay line lengths. Low = tight, close reflections. High = cavernous space with longer pre-delay and denser echo. Combine with high Decay for a large hall sound.">?</span></span><span id="revRoomVal">50%</span></label>
+        <input type="range" id="reverbRoom" min="0" max="100" value="50" step="1"
+          oninput="document.getElementById('revRoomVal').textContent=this.value+'%'">
+        <small>Space scale</small>
+      </div>
+      <div class="slider-group">
+        <label><span>Reverb Decay <span class="tip" data-tip="Controls reverb tail length. Low = short, bright room. 60% = natural hall. High = cathedral or infinite-sounding space. Very high values create washy, evolving pads from any source.">?</span></span><span id="revDecayVal">60%</span></label>
+        <input type="range" id="reverbDecay" min="0" max="100" value="60" step="1"
+          oninput="document.getElementById('revDecayVal').textContent=this.value+'%'">
+        <small>Tail length</small>
+      </div>
+      <div class="slider-group">
+        <label><span>Low Blend <span class="tip" data-tip="Adds the modulator's low-frequency content directly to the output, bypassing the vocoder. The vocoder tends to destroy sub-bass impact — this restores it. Essential for thunder and bass. 0 = off.">?</span></span><span id="lowBlendVal">0%</span></label>
+        <input type="range" id="lowBlend" min="0" max="100" value="0" step="1"
+          oninput="document.getElementById('lowBlendVal').textContent=this.value+'%'">
+        <small>Thunder / bass bypass (0 = off)</small>
+      </div>
+      <div class="slider-group">
+        <label><span>Low Crossover <span class="tip" data-tip="Frequency below which content is taken from the modulator directly (when Low Blend > 0). 80–160 Hz targets thunder and kick impact. Higher values (200–300 Hz) also preserve mid-bass warmth.">?</span></span><span id="lowFreqVal">160 Hz</span></label>
+        <input type="range" id="lowPassFreq" min="50" max="400" value="160" step="5"
+          oninput="document.getElementById('lowFreqVal').textContent=this.value+' Hz'">
+        <small>Bypass below this freq</small>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn-primary" id="runBtn" onclick="handleRun()">
+    <span id="runLabel">Run Vocoder</span>
+    <div class="spinner" id="spinner"></div>
+  </button>
+
+  <div class="error-msg" id="errorMsg"></div>
+
+  <!-- ── Output ────────────────────────────────────── -->
+  <div class="card output-section" id="outputSection">
+    <h2>Output</h2>
+    <div class="output-player">
+      <div class="viz-label">Waveform</div>
+      <canvas id="outCanvas" class="viz-canvas"></canvas>
+      <div class="viz-label" style="margin-top:4px">Spectrum</div>
+      <canvas id="specCanvas" class="spec-canvas"></canvas>
+      <audio id="outputAudio" controls></audio>
+      <a class="download-btn" id="downloadLink" download="vocoded.wav">&#8595; Download WAV</a>
+    </div>
+  </div>
+
+</div>
+<script>
+// ─── Constants ────────────────────────────────────────────────────────────────
+const SR       = 44100;
+
+const DEFAULTS = {
+  processing: { bands: 24, attack: 10, release: 80, unvoiced: 10 },
+  effects: { envContrast: 1, wetDry: 100, spectralBlur: 0, ringMod: 0,
+             tremoloRate: 4, tremoloDepth: 0, vibratoRate: 5, vibratoDepth: 0 },
+  reverb:  { reverbMix: 0, reverbRoom: 50, reverbDecay: 60, lowBlend: 0, lowPassFreq: 160 },
+};
+
+function resetSection(section) {
+  for (const [id, val] of Object.entries(DEFAULTS[section])) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.value = val;
+    el.dispatchEvent(new Event('input'));
+  }
+}
+const SEMITONE = Math.pow(2, 1 / 12);
+const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let modulatorArrayBuffer = null;
+let carrierArrayBuffer   = null;
+let carrierMode          = 'synth';
+let mediaRecorder        = null;
+let recordedChunks       = [];
+let isRecording          = false;
+
+// Visualization state
+let modWaveformCache  = null;   // cached offscreen canvas for modulator waveform
+let outWaveformCache  = null;   // cached offscreen canvas for output waveform
+let modCursorAnimId   = null;
+let outCursorAnimId   = null;
+let outSpectrumAnimId = null;
+let outputAnalyser    = null;
+let outputAudioCtx    = null;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function freqToNote(hz) {
+  const midi = Math.round(12 * Math.log2(hz / 440) + 69);
+  return NOTE_NAMES[((midi % 12) + 12) % 12] + Math.floor(midi / 12 - 1);
+}
+
+// ─── FFT (radix-2 Cooley-Tukey, in-place) ────────────────────────────────────
+function fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      let t = re[i]; re[i] = re[j]; re[j] = t;
+          t = im[i]; im[i] = im[j]; im[j] = t;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len;
+    const wRe = Math.cos(ang), wIm = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let uRe = 1, uIm = 0;
+      const half = len >> 1;
+      for (let j = 0; j < half; j++) {
+        const eRe = re[i+j],    eIm = im[i+j];
+        const oRe = re[i+j+half]*uRe - im[i+j+half]*uIm;
+        const oIm = re[i+j+half]*uIm + im[i+j+half]*uRe;
+        re[i+j]      = eRe + oRe;  im[i+j]      = eIm + oIm;
+        re[i+j+half] = eRe - oRe;  im[i+j+half] = eIm - oIm;
+        const nRe = uRe*wRe - uIm*wIm;
+        uIm = uRe*wIm + uIm*wRe;
+        uRe = nRe;
+      }
+    }
+  }
+}
+
+function ifft(re, im) {
+  for (let i = 0; i < im.length; i++) im[i] = -im[i];
+  fft(re, im);
+  const n = re.length;
+  for (let i = 0; i < n; i++) { re[i] /= n; im[i] = -im[i] / n; }
+}
+
+// ─── Hilbert-transform envelope ───────────────────────────────────────────────
+function hilbertEnvelope(signal) {
+  const n = signal.length;
+  let N = 1;
+  while (N < n) N <<= 1;
+  const re = new Float64Array(N);
+  const im = new Float64Array(N);
+  for (let i = 0; i < n; i++) re[i] = signal[i];
+  fft(re, im);
+  for (let k = 1; k < N >> 1; k++) { re[k] *= 2; im[k] *= 2; }
+  for (let k = (N >> 1) + 1; k < N; k++) { re[k] = 0; im[k] = 0; }
+  ifft(re, im);
+  const env = new Float32Array(n);
+  for (let i = 0; i < n; i++) env[i] = Math.sqrt(re[i]*re[i] + im[i]*im[i]);
+  return env;
+}
+
+// ─── Audio loading ────────────────────────────────────────────────────────────
+async function decodeAndResample(arrayBuffer) {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  let decoded;
+  try { decoded = await ctx.decodeAudioData(arrayBuffer); }
+  finally { ctx.close(); }
+  const mono = toMono(decoded);
+  if (decoded.sampleRate === SR) return mono;
+  const nOut   = Math.ceil(decoded.duration * SR);
+  const offCtx = new OfflineAudioContext(1, nOut, SR);
+  const src    = offCtx.createBufferSource();
+  const buf    = offCtx.createBuffer(1, mono.length, decoded.sampleRate);
+  buf.copyToChannel(mono, 0);
+  src.buffer = buf;
+  src.connect(offCtx.destination);
+  src.start();
+  const rendered = await offCtx.startRendering();
+  return rendered.getChannelData(0).slice();
+}
+
+function toMono(audioBuffer) {
+  if (audioBuffer.numberOfChannels === 1) return audioBuffer.getChannelData(0).slice();
+  const n = audioBuffer.length, nCh = audioBuffer.numberOfChannels;
+  const out = new Float32Array(n);
+  for (let c = 0; c < nCh; c++) {
+    const ch = audioBuffer.getChannelData(c);
+    for (let i = 0; i < n; i++) out[i] += ch[i];
+  }
+  for (let i = 0; i < n; i++) out[i] /= nCh;
+  return out;
+}
+
+// ─── Visualization ────────────────────────────────────────────────────────────
+
+// Draw a waveform onto a canvas and return it as a cached offscreen canvas.
+function buildWaveformCache(samples, W, H) {
+  const off = document.createElement('canvas');
+  off.width = W; off.height = H;
+  const ctx = off.getContext('2d');
+
+  // Background
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(0, 0, W, H);
+
+  // Center line
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+
+  if (!samples || samples.length === 0) return off;
+
+  const step = samples.length / W;
+
+  // Build top and bottom paths for filled waveform
+  const topY    = new Float32Array(W);
+  const bottomY = new Float32Array(W);
+  for (let x = 0; x < W; x++) {
+    const s = Math.floor(x * step);
+    const e = Math.min(Math.floor((x + 1) * step) + 1, samples.length);
+    let mn = 0, mx = 0;
+    for (let j = s; j < e; j++) {
+      if (samples[j] > mx) mx = samples[j];
+      if (samples[j] < mn) mn = samples[j];
+    }
+    topY[x]    = H / 2 - mx * (H / 2 - 4);
+    bottomY[x] = H / 2 - mn * (H / 2 - 4);
+  }
+
+  // Filled shape
+  ctx.beginPath();
+  ctx.moveTo(0, topY[0]);
+  for (let x = 1; x < W; x++) ctx.lineTo(x, topY[x]);
+  for (let x = W - 1; x >= 0; x--) ctx.lineTo(x, bottomY[x]);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(99,102,241,0.18)';
+  ctx.fill();
+
+  // Top outline
+  ctx.beginPath();
+  ctx.moveTo(0, topY[0]);
+  for (let x = 1; x < W; x++) ctx.lineTo(x, topY[x]);
+  ctx.strokeStyle = 'rgba(99,102,241,0.7)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Bottom outline
+  ctx.beginPath();
+  ctx.moveTo(0, bottomY[0]);
+  for (let x = 1; x < W; x++) ctx.lineTo(x, bottomY[x]);
+  ctx.stroke();
+
+  return off;
+}
+
+// Render the cached waveform + a playback cursor onto the visible canvas.
+function renderWaveform(canvas, cache, audioEl) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  if (cache) ctx.drawImage(cache, 0, 0, W, H);
+
+  if (audioEl && audioEl.duration > 0 && !audioEl.paused) {
+    const x = Math.round((audioEl.currentTime / audioEl.duration) * W);
+    ctx.save();
+    ctx.strokeStyle = '#4f46e5';
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// Resize canvas to its CSS display size (for crisp rendering on high-DPI).
+function fitCanvas(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const W = Math.round(rect.width  * dpr);
+  const H = Math.round(rect.height * dpr);
+  if (canvas.width !== W || canvas.height !== H) {
+    canvas.width  = W;
+    canvas.height = H;
+  }
+  return { W, H };
+}
+
+// Start the cursor animation loop for a waveform canvas.
+function startCursorAnim(canvasId, cacheRef, audioEl) {
+  const canvas = document.getElementById(canvasId);
+  function tick() {
+    const { W, H } = fitCanvas(canvas);
+    // Rebuild cache if size changed
+    if (!cacheRef.val || cacheRef.val.width !== W) {
+      cacheRef.val = buildWaveformCache(cacheRef.samples, W, H);
+    }
+    renderWaveform(canvas, cacheRef.val, audioEl);
+    return requestAnimationFrame(tick);
+  }
+  return tick();
+}
+
+function stopAnim(id) { if (id) cancelAnimationFrame(id); return null; }
+
+// ─── Spectrum analyser ────────────────────────────────────────────────────────
+function setupSpectrumAnalyser() {
+  if (outputAudioCtx) return; // already connected — a MediaElementSource can only be created once per element
+  const audioEl = document.getElementById('outputAudio');
+  outputAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const src = outputAudioCtx.createMediaElementSource(audioEl);
+  outputAnalyser = outputAudioCtx.createAnalyser();
+  outputAnalyser.fftSize = 512;
+  outputAnalyser.smoothingTimeConstant = 0.82;
+  src.connect(outputAnalyser);
+  outputAnalyser.connect(outputAudioCtx.destination);
+}
+
+function drawSpectrum() {
+  const canvas = document.getElementById('specCanvas');
+  if (!outputAnalyser || !canvas) return;
+  const { W, H } = fitCanvas(canvas);
+  const data    = new Uint8Array(outputAnalyser.frequencyBinCount);
+  outputAnalyser.getByteFrequencyData(data);
+  const ctx     = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  const bars   = 80;
+  const barW   = W / bars;
+  const bins   = data.length;
+
+  // Map bar index to frequency bin logarithmically
+  const logMin = Math.log10(1);
+  const logMax = Math.log10(bins);
+
+  for (let i = 0; i < bars; i++) {
+    const lo  = Math.floor(Math.pow(10, logMin + (logMax - logMin) * i / bars));
+    const hi  = Math.ceil( Math.pow(10, logMin + (logMax - logMin) * (i + 1) / bars));
+    let sum = 0, count = 0;
+    for (let b = lo; b <= Math.min(hi, bins - 1); b++) { sum += data[b]; count++; }
+    const avg  = count ? sum / count : 0;
+    const barH = (avg / 255) * H;
+    const hue  = 220 + (i / bars) * 80;
+    ctx.fillStyle = `hsla(${hue}, 75%, 62%, 0.9)`;
+    ctx.fillRect(i * barW + 0.5, H - barH, Math.max(barW - 1, 1), barH);
+  }
+
+  outSpectrumAnimId = requestAnimationFrame(drawSpectrum);
+}
+
+function stopSpectrum() {
+  if (outSpectrumAnimId) { cancelAnimationFrame(outSpectrumAnimId); outSpectrumAnimId = null; }
+}
+
+// ─── DSP ──────────────────────────────────────────────────────────────────────
+function matchLength(mod, car) {
+  const n = mod.length;
+  if (car.length === n) return car;
+  if (car.length > n)  return car.slice(0, n);
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) out[i] = car[i % car.length];
+  return out;
+}
+
+function bandpassBiquad(fLow, fHigh, sr) {
+  const f0    = Math.sqrt(fLow * fHigh);
+  const Q     = Math.max(f0 / (fHigh - fLow), 0.1);
+  const w0    = 2 * Math.PI * f0 / sr;
+  const cosW0 = Math.cos(w0);
+  const alpha = Math.sin(w0) / (2 * Q);
+  const a0    = 1 + alpha;
+  return { b0: alpha/a0, b2: -alpha/a0, a1: -2*cosW0/a0, a2: (1-alpha)/a0 };
+}
+
+function applyBiquad(signal, { b0, b1 = 0, b2, a1, a2 }) {
+  const n = signal.length;
+  const out = new Float32Array(n);
+  let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  for (let i = 0; i < n; i++) {
+    const x0 = signal[i];
+    const y0 = b0*x0 + b1*x1 + b2*x2 - a1*y1 - a2*y2;
+    out[i] = y0; x2 = x1; x1 = x0; y2 = y1; y1 = y0;
+  }
+  return out;
+}
+
+function lowpassBiquad(fCutoff, sr) {
+  const w0    = 2 * Math.PI * fCutoff / sr;
+  const cosW0 = Math.cos(w0), sinW0 = Math.sin(w0);
+  const alpha = sinW0 * Math.SQRT1_2; // Q = 1/√2 Butterworth
+  const a0    = 1 + alpha;
+  return {
+    b0: (1 - cosW0) / 2 / a0,
+    b1: (1 - cosW0) / a0,
+    b2: (1 - cosW0) / 2 / a0,
+    a1: -2 * cosW0 / a0,
+    a2: (1 - alpha) / a0,
+  };
+}
+
+function apply4thOrder(signal, coeffs) {
+  return applyBiquad(applyBiquad(signal, coeffs), coeffs);
+}
+
+function extractEnvelope(signal, alphaA, alphaR) {
+  const raw = hilbertEnvelope(signal);
+  const out = new Float32Array(raw.length);
+  let prev  = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const x = raw[i], a = x > prev ? alphaA : alphaR;
+    prev = a * prev + (1 - a) * x;
+    out[i] = prev;
+  }
+  return out;
+}
+
+function buildFilterBank(nBands, fLow, fHigh, sr) {
+  const logLow = Math.log10(fLow), logHigh = Math.log10(fHigh);
+  return Array.from({ length: nBands }, (_, i) => bandpassBiquad(
+    Math.pow(10, logLow + (logHigh - logLow) * i / nBands),
+    Math.pow(10, logLow + (logHigh - logLow) * (i + 1) / nBands),
+    sr
+  ));
+}
+
+// ─── Carrier generation ───────────────────────────────────────────────────────
+const CHORD_INTERVALS = { single:[0], major:[0,4,7], minor:[0,3,7], power:[0,7], octaves:[0,12,24] };
+
+function chordFreqs(root, chord) {
+  return CHORD_INTERVALS[chord].map(s => root * Math.pow(SEMITONE, s));
+}
+
+function oscillator(waveform, freq, n, sr, vibRate, vibDepthCents) {
+  const out = new Float32Array(n);
+  const useVib = vibDepthCents > 0;
+  let phase = 0;
+  for (let i = 0; i < n; i++) {
+    const t = phase;
+    if      (waveform === 'saw')    out[i] = 2*t - 1;
+    else if (waveform === 'square') out[i] = t < 0.5 ? 1 : -1;
+    else if (waveform === 'tri')    out[i] = t < 0.5 ? 4*t - 1 : 3 - 4*t;
+    else                            out[i] = Math.sin(2 * Math.PI * t);
+    const lfoF = useVib
+      ? Math.pow(2, vibDepthCents * Math.sin(2 * Math.PI * vibRate * i / sr) / 1200)
+      : 1;
+    phase += freq * lfoF / sr;
+    if (phase >= 1) phase -= 1;
+  }
+  return out;
+}
+
+function generateCarrier(n, sr, { mode, waveform, chord, pitch, detune, vibRate, vibDepthCents }) {
+  if (mode === 'noise') {
+    const out = new Float32Array(n);
+    for (let i = 0; i < n; i++) out[i] = Math.random() * 2 - 1;
+    return out;
+  }
+  const freqs = chordFreqs(pitch, chord);
+  const dRatio = Math.pow(2, detune / 1200);
+  const out = new Float32Array(n);
+  let voices = 0;
+  for (const f of freqs) {
+    const v1 = oscillator(waveform, f, n, sr, vibRate, vibDepthCents);
+    for (let i = 0; i < n; i++) out[i] += v1[i]; voices++;
+    if (detune > 0) {
+      const v2 = oscillator(waveform, f * dRatio, n, sr, vibRate, vibDepthCents);
+      for (let i = 0; i < n; i++) out[i] += v2[i]; voices++;
+    }
+  }
+  for (let i = 0; i < n; i++) out[i] /= voices;
+  return out;
+}
+
+function applyContrast(env, contrast) {
+  if (contrast === 1) return;
+  for (let i = 0; i < env.length; i++) env[i] = Math.pow(env[i], contrast);
+}
+
+function runVocoder(mod, car, filterBank, sr, attackMs, releaseMs, blur, contrast) {
+  const n      = mod.length;
+  const output = new Float32Array(n);
+  const alphaA = Math.exp(-1 / Math.max(attackMs  / 1000 * sr, 1));
+  const alphaR = Math.exp(-1 / Math.max(releaseMs / 1000 * sr, 1));
+
+  if (!blur) {
+    for (const coeffs of filterBank) {
+      const modBand = apply4thOrder(mod, coeffs);
+      const carBand = apply4thOrder(car, coeffs);
+      const env     = extractEnvelope(modBand, alphaA, alphaR);
+      applyContrast(env, contrast);
+      for (let i = 0; i < n; i++) output[i] += carBand[i] * env[i];
+    }
+    return output;
+  }
+
+  // Blur path: collect all envelopes + carrier bands, then average neighbors
+  const nb       = filterBank.length;
+  const envs     = new Array(nb);
+  const carBands = new Array(nb);
+  for (let b = 0; b < nb; b++) {
+    const coeffs  = filterBank[b];
+    const modBand = apply4thOrder(mod, coeffs);
+    carBands[b]   = apply4thOrder(car, coeffs);
+    envs[b]       = extractEnvelope(modBand, alphaA, alphaR);
+    applyContrast(envs[b], contrast);
+  }
+  for (let b = 0; b < nb; b++) {
+    const blurred = new Float32Array(n);
+    let count = 0;
+    for (let k = -blur; k <= blur; k++) {
+      const idx = b + k;
+      if (idx >= 0 && idx < nb) {
+        const e = envs[idx];
+        for (let i = 0; i < n; i++) blurred[i] += e[i];
+        count++;
+      }
+    }
+    const cb = carBands[b], inv = 1 / count;
+    for (let i = 0; i < n; i++) output[i] += cb[i] * blurred[i] * inv;
+  }
+  return output;
+}
+
+function normalize(signal) {
+  let peak = 0;
+  for (let i = 0; i < signal.length; i++) { const a = Math.abs(signal[i]); if (a > peak) peak = a; }
+  if (peak < 1e-9) return signal;
+  const gain = Math.pow(10, -3 / 20) / peak;
+  const out  = new Float32Array(signal.length);
+  for (let i = 0; i < signal.length; i++) out[i] = signal[i] * gain;
+  return out;
+}
+
+function schroederReverb(signal, sr, roomSize, decay) {
+  const n       = signal.length;
+  const scale   = 0.7 + roomSize * 0.6; // scales delay lengths: small room → large room
+  const combDelays = [1116, 1188, 1277, 1356].map(d => Math.round(d * scale));
+  const apDelays   = [556, 441].map(d => Math.round(d * scale));
+  const feedback   = 0.5 + decay * 0.45; // 0.5–0.95 comb feedback
+  const apFeedback = 0.5;
+
+  // 4 parallel comb filters → sum
+  const out = new Float32Array(n);
+  for (const delay of combDelays) {
+    const buf = new Float32Array(delay);
+    let pos = 0;
+    for (let i = 0; i < n; i++) {
+      const y = buf[pos];
+      buf[pos] = signal[i] + y * feedback;
+      out[i] += y;
+      if (++pos >= delay) pos = 0;
+    }
+  }
+  for (let i = 0; i < n; i++) out[i] /= combDelays.length;
+
+  // 2 series allpass filters (Freeverb formulation)
+  for (const delay of apDelays) {
+    const buf = new Float32Array(delay);
+    let pos = 0;
+    for (let i = 0; i < n; i++) {
+      const bufout = buf[pos];
+      const input  = out[i];
+      buf[pos] = input + bufout * apFeedback;
+      out[i]   = bufout - input;
+      if (++pos >= delay) pos = 0;
+    }
+  }
+  return out;
+}
+
+function encodeWAV(samples, sr) {
+  const buf  = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buf);
+  const str  = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+  str(0,'RIFF'); view.setUint32(4,36+samples.length*2,true);
+  str(8,'WAVE'); str(12,'fmt ');
+  view.setUint32(16,16,true); view.setUint16(20,1,true); view.setUint16(22,1,true);
+  view.setUint32(24,sr,true); view.setUint32(28,sr*2,true);
+  view.setUint16(32,2,true);  view.setUint16(34,16,true);
+  str(36,'data'); view.setUint32(40,samples.length*2,true);
+  for (let i = 0; i < samples.length; i++)
+    view.setInt16(44+i*2, Math.max(-1,Math.min(1,samples[i]))*32767, true);
+  return buf;
+}
+
+// ─── Main pipeline ────────────────────────────────────────────────────────────
+async function handleRun() {
+  hideError();
+  if (!modulatorArrayBuffer) { showError('Please upload or record a modulator first.'); return; }
+
+  setProcessing(true);
+  await new Promise(r => setTimeout(r, 20));
+
+  try {
+    const mod = await decodeAndResample(modulatorArrayBuffer.slice());
+
+    const vibRate       = parseFloat(document.getElementById('vibratoRate').value);
+    const vibDepthCents = parseFloat(document.getElementById('vibratoDepth').value);
+
+    let car;
+    if (carrierArrayBuffer) {
+      car = matchLength(mod, await decodeAndResample(carrierArrayBuffer.slice()));
+    } else {
+      car = generateCarrier(mod.length, SR, {
+        mode:     carrierMode,
+        waveform: document.querySelector('input[name="waveform"]:checked').value,
+        chord:    document.querySelector('input[name="chord"]:checked').value,
+        pitch:    parseFloat(document.getElementById('pitch').value),
+        detune:   parseFloat(document.getElementById('detune').value),
+        vibRate,
+        vibDepthCents,
+      });
+    }
+
+    const unvoicedMix = parseFloat(document.getElementById('unvoiced').value) / 100;
+    if (unvoicedMix > 0) {
+      for (let i = 0; i < car.length; i++)
+        car[i] = (1 - unvoicedMix) * car[i] + unvoicedMix * (Math.random() * 2 - 1);
+    }
+
+    const nBands   = parseInt(document.getElementById('bands').value);
+    const attack   = parseFloat(document.getElementById('attack').value);
+    const release  = parseFloat(document.getElementById('release').value);
+    const blur     = parseInt(document.getElementById('spectralBlur').value);
+    const contrast = parseFloat(document.getElementById('envContrast').value);
+    const bank     = buildFilterBank(nBands, 80, 8000, SR);
+    let   output   = runVocoder(mod, car, bank, SR, attack, release, blur, contrast);
+    output = normalize(output);
+
+    // Wet / dry mix
+    const wet = parseFloat(document.getElementById('wetDry').value) / 100;
+    if (wet < 1) {
+      const dry = normalize(mod);
+      for (let i = 0; i < output.length; i++) output[i] = wet * output[i] + (1 - wet) * dry[i];
+      output = normalize(output);
+    }
+
+    // Ring modulation
+    const ringFreq = parseFloat(document.getElementById('ringMod').value);
+    if (ringFreq > 0) {
+      for (let i = 0; i < output.length; i++)
+        output[i] *= Math.sin(2 * Math.PI * ringFreq * i / SR);
+      output = normalize(output);
+    }
+
+    // Tremolo
+    const tremRate  = parseFloat(document.getElementById('tremoloRate').value);
+    const tremDepth = parseFloat(document.getElementById('tremoloDepth').value) / 100;
+    if (tremDepth > 0) {
+      for (let i = 0; i < output.length; i++) {
+        const lfo = (Math.sin(2 * Math.PI * tremRate * i / SR) + 1) / 2;
+        output[i] *= 1 - tremDepth * (1 - lfo);
+      }
+    }
+
+    // Low-band preservation — bypass vocoder for sub-crossover content
+    const lowBlend = parseFloat(document.getElementById('lowBlend').value) / 100;
+    if (lowBlend > 0) {
+      const lowFreq   = parseFloat(document.getElementById('lowPassFreq').value);
+      const lowCoeffs = lowpassBiquad(lowFreq, SR);
+      const lowMod    = apply4thOrder(mod, lowCoeffs);
+      const lowNorm   = normalize(lowMod);
+      for (let i = 0; i < output.length; i++) output[i] += lowBlend * lowNorm[i];
+      output = normalize(output);
+    }
+
+    // Reverb (Schroeder)
+    const reverbMix = parseFloat(document.getElementById('reverbMix').value) / 100;
+    if (reverbMix > 0) {
+      const roomSize   = parseFloat(document.getElementById('reverbRoom').value) / 100;
+      const reverbDecay = parseFloat(document.getElementById('reverbDecay').value) / 100;
+      const reverbWet  = schroederReverb(output, SR, roomSize, reverbDecay);
+      for (let i = 0; i < output.length; i++)
+        output[i] = (1 - reverbMix) * output[i] + reverbMix * reverbWet[i];
+      output = normalize(output);
+    }
+
+    const blob = new Blob([encodeWAV(output, SR)], { type: 'audio/wav' });
+    const url  = URL.createObjectURL(blob);
+
+    // ── Show output ────
+    const audioEl = document.getElementById('outputAudio');
+    audioEl.src = url;
+    document.getElementById('downloadLink').href = url;
+    document.getElementById('outputSection').classList.add('visible');
+
+    // Draw output waveform
+    const outCanvas = document.getElementById('outCanvas');
+    const { W, H }  = fitCanvas(outCanvas);
+    outWaveformCache = { samples: output, val: buildWaveformCache(output, W, H) };
+    outCursorAnimId  = stopAnim(outCursorAnimId);
+    outCursorAnimId  = startCursorAnim('outCanvas', outWaveformCache, audioEl);
+
+    // Set up spectrum analyser (teardown previous if any)
+    setupSpectrumAnalyser();
+
+    audioEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (e) {
+    showError('Processing failed: ' + e.message);
+  } finally {
+    setProcessing(false);
+  }
+}
+
+// ─── Output audio events ──────────────────────────────────────────────────────
+document.getElementById('outputAudio').addEventListener('play', () => {
+  if (outputAudioCtx && outputAudioCtx.state === 'suspended') outputAudioCtx.resume();
+  drawSpectrum();
+});
+document.getElementById('outputAudio').addEventListener('pause', stopSpectrum);
+document.getElementById('outputAudio').addEventListener('ended', stopSpectrum);
+
+// ─── Modulator preview ────────────────────────────────────────────────────────
+async function showModulatorPreview(arrayBuffer, blobUrl) {
+  // Decode to get waveform samples (at native SR — just for display)
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  let decoded;
+  try { decoded = await ctx.decodeAudioData(arrayBuffer.slice()); }
+  finally { ctx.close(); }
+  const samples = toMono(decoded);
+
+  const modCanvas = document.getElementById('modCanvas');
+  const { W, H }  = fitCanvas(modCanvas);
+  modWaveformCache = { samples, val: buildWaveformCache(samples, W, H) };
+
+  const audioEl   = document.getElementById('modAudio');
+  audioEl.src     = blobUrl;
+  document.getElementById('modPreview').classList.add('visible');
+
+  modCursorAnimId = stopAnim(modCursorAnimId);
+  modCursorAnimId = startCursorAnim('modCanvas', modWaveformCache, audioEl);
+}
+
+// ─── File inputs ──────────────────────────────────────────────────────────────
+document.getElementById('modFile').addEventListener('change', function () {
+  if (!this.files[0]) return;
+  const file = this.files[0];
+  file.arrayBuffer().then(buf => {
+    modulatorArrayBuffer = buf;
+    setZoneLabel('modZoneText', file.name);
+    document.getElementById('modClear').style.display = 'inline-block';
+    const blobUrl = URL.createObjectURL(file);
+    showModulatorPreview(buf, blobUrl);
+  });
+});
+
+document.getElementById('carFile').addEventListener('change', function () {
+  if (!this.files[0]) return;
+  this.files[0].arrayBuffer().then(buf => {
+    carrierArrayBuffer = buf;
+    setZoneLabel('carZoneText', this.files[0].name);
+    document.getElementById('carClear').style.display = 'inline-block';
+    setSynthDisabled(true);
+  });
+});
+
+function clearModulator() {
+  modulatorArrayBuffer = null;
+  document.getElementById('modFile').value = '';
+  setZoneLabel('modZoneText', 'Click or drag an audio file');
+  document.getElementById('modClear').style.display = 'none';
+  document.getElementById('modPreview').classList.remove('visible');
+  document.getElementById('modAudio').src = '';
+  modCursorAnimId = stopAnim(modCursorAnimId);
+  modWaveformCache = null;
+}
+
+function clearCarrier() {
+  carrierArrayBuffer = null;
+  document.getElementById('carFile').value = '';
+  setZoneLabel('carZoneText', 'Upload a file (optional)');
+  document.getElementById('carClear').style.display = 'none';
+  setSynthDisabled(false);
+}
+
+// ─── Carrier mode UI ──────────────────────────────────────────────────────────
+function setCarrierMode(mode) {
+  carrierMode = mode;
+  document.getElementById('tabSynth').classList.toggle('active', mode === 'synth');
+  document.getElementById('tabNoise').classList.toggle('active', mode === 'noise');
+  document.getElementById('synthOpts').classList.toggle('hidden', mode === 'noise');
+}
+
+function setSynthDisabled(disabled) {
+  ['modeTabs', 'synthOpts'].forEach(id => {
+    document.getElementById(id).style.opacity = disabled ? '.35' : '1';
+    document.getElementById(id).style.pointerEvents = disabled ? 'none' : '';
+  });
+}
+
+// ─── Microphone ───────────────────────────────────────────────────────────────
+async function toggleRecord() {
+  if (!isRecording) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      recordedChunks = [];
+      mediaRecorder  = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+        blob.arrayBuffer().then(buf => {
+          modulatorArrayBuffer = buf;
+          setZoneLabel('modZoneText', 'Recording ready');
+          document.getElementById('modClear').style.display = 'inline-block';
+          showModulatorPreview(buf, URL.createObjectURL(blob));
+        });
+        stream.getTracks().forEach(t => t.stop());
+      };
+      mediaRecorder.start();
+      isRecording = true;
+      const btn = document.getElementById('recordBtn');
+      btn.innerHTML = '&#9632; Stop'; btn.classList.add('active');
+    } catch { showError('Microphone access denied.'); }
+  } else {
+    mediaRecorder.stop();
+    isRecording = false;
+    const btn = document.getElementById('recordBtn');
+    btn.innerHTML = '&#9679; Record'; btn.classList.remove('active');
+  }
+}
+
+// ─── UI helpers ───────────────────────────────────────────────────────────────
+function setZoneLabel(id, text) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = (text === 'Click or drag an audio file' || text === 'Upload a file (optional)') ? 'zone-text' : 'zone-name';
+}
+function setProcessing(on) {
+  document.getElementById('runBtn').disabled         = on;
+  document.getElementById('runLabel').style.display = on ? 'none'  : 'block';
+  document.getElementById('spinner').style.display  = on ? 'block' : 'none';
+}
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent = msg; el.classList.add('visible');
+}
+function hideError() { document.getElementById('errorMsg').classList.remove('visible'); }
+</script>
+</body>
+</html>

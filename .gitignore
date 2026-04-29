@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+venv/
+.venv/
+
+# Audio scratch files
+*.wav
+*.mp3
+*.ogg
+*.flac
+output.wav
+
+# OS
+.DS_Store
+Thumbs.db
