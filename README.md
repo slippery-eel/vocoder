@@ -6,16 +6,7 @@ Apply any sound's spectral shape to a synthesized carrier. Works great with voic
 
 ## Quick start
 
-```
-# Browser UI
-open index.html   # or just double-click it
-
-# Python CLI
-pip install -r requirements.txt
-python vocoder.py --modulator voice.wav
-python vocoder.py --modulator rain.wav --carrier-mode noise --bands 32
-python vocoder.py --modulator voice.wav --carrier synth.wav --output result.wav
-```
+Download or clone the repo, then open `index.html` in any modern browser. No install, no server, no build step.
 
 ## How it works
 
@@ -68,24 +59,3 @@ The modulator (your voice or any audio) is split into frequency bands via a log-
 - **Thunder**: Low Blend 60–80%, Low Crossover 100–160 Hz, long Release, large Reverb
 - **Birds**: Bands 24–32, fast Attack/Release, Spectral Blur 2–4 for ambient pad effect
 - **Wind**: Noise carrier, high Wet/Dry, Spectral Blur 3–6, Reverb Mix 30–50%
-
-## Files
-
-| File | Description |
-|------|-------------|
-| `index.html` | Self-contained browser app — all DSP in vanilla JavaScript |
-| `vocoder.py` | Python CLI with the same pipeline using NumPy/SciPy |
-| `requirements.txt` | Python dependencies |
-
-## Python CLI options
-
-```
-python vocoder.py --modulator PATH    # required: source audio
-                  --carrier PATH      # optional: carrier audio file
-                  --output PATH       # default: output.wav
-                  --bands N           # default: 16
-                  --attack MS         # default: 10
-                  --release MS        # default: 100
-                  --carrier-mode      # sawtooth | noise | chord
-                  --sample-rate HZ    # default: 44100
-```
